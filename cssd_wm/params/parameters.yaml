@@ -1,0 +1,4 @@
+cssd_wm:
+  ros__parameters:
+    workcell1_inventory: ["basin"]
+    workcell2_inventory: ["instrument1","instrument2","instrument3"]
