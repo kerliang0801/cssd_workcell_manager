@@ -1,5 +1,8 @@
 # cssd_workcellmanager (cssd_wm)
 
+## acronym
+RAWM = Robot Arm Workcell Manager
+
 ## dependency
 1. mysql cpp connect
 ```
