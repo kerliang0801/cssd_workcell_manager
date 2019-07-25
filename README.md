@@ -1,4 +1,4 @@
-# cssd_workcellmanager (cssd_wm)
+# cssd_workcell_manager (cssd_wm)
 
 ## acronym
 RAWM = Robot Arm Workcell Manager
