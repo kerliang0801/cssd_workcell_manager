@@ -1,41 +1,67 @@
 #include "cssd_wm.h"
 
+/* assumptions:
+1.Request for item only comes when vechicle has arrived
+2.Arm only send fail when it is unable to recover. Once it sends fail, the whole request will fail. If required to be change see request_callback
+3.
+*/
 
 
 
-cssd_wm::cssd_wm(int no_of_workcell): Node("cssd_wm")
+cssd_wm::cssd_wm(int no_of_RAWM): Node("cssd_wm")
 {
-  CheckInventory_ = this->create_subscription<cssd_msgs::msg::InventoryCheckRequest>("/dispenser_inventory_check_request", std::bind(&cssd_wm::inventory_check, this, _1));
-  DispenserRequest_ = this->create_subscription<cssd_msgs::msg::DispenserRequest>("/dispenser_request", std::bind(&cssd_wm::request_callback, this, _1));
-  
+  CheckInventory_ = this->create_subscription<cssd_msgs::msg::InventoryCheckRequest>("/dispenser_inventory_check_request", std::bind(&cssd_wm::inventory_check_callback, this, _1));
+  DispenserRequest_ = this->create_subscription<cssd_msgs::msg::DispenserRequest>("/dispenser_request", std::bind(&cssd_wm::dispenser_request_callback, this, _1));
+  RAWMRespond_ = this->create_subscription<cssd_msgs::msg::DispenserResult>("/RAWM_result",std::bind(&cssd_wm::RAWM_respond_callback, this, _1));
+  RAWMState_ = this->create_subscription<cssd_msgs::msg::DispenserState>("/RAWM_state",std::bind(&cssd_wm::RAWM_state_callback, this, _1));
   InventoryCheckResponse_ = this->create_publisher<cssd_msgs::msg::InventoryCheckResponse>("/dispenser_inventory_check_response");
+  RAWMRequest_ =  this->create_publisher<cssd_msgs::msg::DispenserRequest>("/RAWM_request");
+  DispenserResponsd_ = this->create_publisher<cssd_msgs::msg::DispenserResult>("/dispenser_result");
+  
+  //declaring parameter
+  this->declare_parameter("dispenser_name");
+  this->declare_parameter("ip_address");
+  this->declare_parameter("username");
+  this->declare_parameter("password");
+  this->declare_parameter("database_name");
 
-
-  for (int i=1;i<=no_of_workcell;i++)
+  for (int i=1;i<=no_of_RAWM;i++)
   {
-    RAM.push_back(workcell());
-    (RAM.back().name) = "workcell" + std::to_string(i);
-    this->get_parameter(RAM.back().name + "_inventory", RAM.back().item_carried);
+    RAWM.push_back(sub_workcell());
+    (RAWM.back().name) = "RAWM" + std::to_string(i);
+    std::string inventory_required = RAWM.back().name + "_inventory";
+    this->declare_parameter(inventory_required);
+    this->get_parameter(inventory_required, RAWM.back().item_carried_by_RAWM);
   }
 
-  for (std::vector<workcell>::iterator it = RAM.begin() ; it != RAM.end(); ++it)
-  {
+
+//check to make sure item carried is correct
+  // for (std::vector<sub_workcell>::iterator it = RAWM.begin() ; it != RAWM.end(); ++it)
+  // {
     
-    RCLCPP_INFO(this->get_logger(), it->name);
-    for (std::vector<std::string>::iterator i = it->item_carried.begin() ; i != it->item_carried.end(); ++i)
-    {
+  //   RCLCPP_INFO(this->get_logger(), it->name);
+  //   for (std::vector<std::string>::iterator i = it->item_carried_by_RAWM.begin() ; i != it->item_carried_by_RAWM.end(); ++i)
+  //   {
       
-      RCLCPP_INFO(this->get_logger(), *i);
-    }
-  }
+  //     RCLCPP_INFO(this->get_logger(), *i);
+  //   }
+  // }
 
+
+  this->get_parameter("dispenser_name",dispenser_name);
+  this->get_parameter("ip_address",ip_address);
+  this->get_parameter("username",username);
+  this->get_parameter("password",password);
+  this->get_parameter("database_name",database_name);
+ 
   try 
   {
     driver = get_driver_instance();
-    con = driver->connect("tcp://127.0.0.1:3306", "malcomneo", "malcomneo");
-    con->setSchema("inventory");
-
-  } 
+    con = driver->connect("tcp://" + ip_address, username, password);
+    con->setSchema(database_name);
+    // con = driver->connect("tcp://127.0.0.1:3306", "malcomneo", "malcomneo");
+    // con->setSchema("inventory");  } 
+  }
   catch (sql::SQLException &e) 
   {
     RCLCPP_ERROR(this->get_logger(),"DB connection error.'%s' '%s'",(e.what()),(e.getErrorCode()));
@@ -43,7 +69,7 @@ cssd_wm::cssd_wm(int no_of_workcell): Node("cssd_wm")
 }
 
 
-void cssd_wm::inventory_check(const cssd_msgs::msg::InventoryCheckRequest::SharedPtr msg)
+void cssd_wm::inventory_check_callback(const cssd_msgs::msg::InventoryCheckRequest::SharedPtr msg)
 {
   cssd_msgs::msg::InventoryCheckResponse response;
   response.check_id = msg -> check_id;
@@ -51,7 +77,7 @@ void cssd_wm::inventory_check(const cssd_msgs::msg::InventoryCheckRequest::Share
   stmt = con->createStatement();
   res = stmt->executeQuery("SELECT item, COUNT(*) FROM workcell GROUP BY item");
 
-  for (uint8_t i=0;i<msg->items.size();i++)
+  for (int i=0;i<msg->items.size();i++)
   { //looping through the item array
     while (res->next())
     {
@@ -72,78 +98,191 @@ void cssd_wm::inventory_check(const cssd_msgs::msg::InventoryCheckRequest::Share
   }
   response.all_available = true;
   InventoryCheckResponse_->publish(response);
-}
 
-
-
-void cssd_wm::request_callback(const cssd_msgs::msg::DispenserRequest::SharedPtr msg)
-{
-
-  if (msg->dispenser_name != "cssd_workcell")
-  {
-    RCLCPP_INFO(this->get_logger(),"cssd dispenser not requested");
-    return;
-  }
-
-  std::string request_id = msg->request_id;
-
-  for (uint8_t items_position=0; items_position<msg->items.size();items_position++)
+  for (int items_position=0; items_position<msg->items.size();items_position++)
   { //looping through requested item
-    std::string item_type = msg->items[items_position].item_type;
-    uint32_t quantity = msg->items[items_position].quantity;
 
-    for (std::vector<workcell>::iterator RAM_pointer = RAM.begin() ; RAM_pointer != RAM.end(); ++RAM_pointer)
-    { //looping through RAM
-      std::cout<< " in ram loop "<<std::endl;
-      if (std::find(RAM_pointer->item_carried.begin(), RAM_pointer->item_carried.end(), item_type) != RAM_pointer->item_carried.end())
-      {// if item is carried by the RAM in other words, if RAM is responsible for that item
-              std::cout<< " found who own item "<<std::endl;
-        if ((RAM_pointer->queue.size() == 0) or (RAM_pointer->queue.back().request_id != request_id) )
+    std::string item_type = msg->items[items_position].item_type;
+    int32_t quantity = msg->items[items_position].quantity;
+
+    for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
+    { //looping through RAWM
+      if (std::find(RAWM_pointer->item_carried_by_RAWM.begin(), RAWM_pointer->item_carried_by_RAWM.end(), item_type) != RAWM_pointer->item_carried_by_RAWM.end())
+      {// if item is carried by the RAWM in other words, if RAWM is responsible for that item
+        if ((RAWM_pointer->queue.size() == 0) or (RAWM_pointer->queue.back().request_id != msg->check_id) )
         {//if the last queue is not related to current order, create a new one
-                std::cout<< " pushed back "<<std::endl;
-          RAM_pointer->queue.push_back(requests());
-          RAM_pointer->queue.back().request_id = request_id;
-          RAM_pointer->queue.back().transporter_type = msg -> transporter_type;
+          RAWM_pointer->queue.push_back(requests());
+          RAWM_pointer->queue.back().request_id = msg->check_id;
         }
-              std::cout<< " went past push back "<<std::endl;
         stmt = con->createStatement();
         res = stmt->executeQuery("SELECT * FROM workcell ORDER BY item");
-
-        int item_entered_count=0;
+        int item_entered_count=0; 
         while (res->next() and item_entered_count<quantity) 
         {
           if(res ->getString("item") == item_type)
           {
             int aruco_id = std::stoi(res->getString("aruco_id"));
-            RAM_pointer->queue.back().aruco_id.push_back(aruco_id);
+            RAWM_pointer->queue.back().aruco_id.push_back(aruco_id);
             item_entered_count+=1;
             pstmt = con->prepareStatement("DELETE FROM workcell WHERE aruco_id = (?)");
             pstmt->setInt(1,aruco_id);
             pstmt->executeUpdate();
           }
-
         }
       }  
     }
   }
-  for (std::vector<workcell>::iterator it = RAM.begin() ; it != RAM.end(); ++it)
-  {
-            RCLCPP_INFO(this->get_logger(),it->name);
 
-    for (std::vector<requests>::iterator queue = it->queue.begin() ; queue != it->queue.end(); ++queue)
-    {
+  //print out the queue to make sure that the items is added in the RAWM
+  // for (std::vector<sub_workcell>::iterator it = RAWM.begin() ; it != RAWM.end(); ++it)
+  // {
+  //           RCLCPP_INFO(this->get_logger(),it->name);
 
-      for (std::vector<uint32_t>::iterator aruco_id = queue->aruco_id.begin() ; aruco_id != queue->aruco_id.end(); ++aruco_id)
-      {
+  //   for (std::vector<requests>::iterator queue = it->queue.begin() ; queue != it->queue.end(); ++queue)
+  //   {
+  //     std::cout<<queue -> request_id<<std::endl; 
+  //     for (std::vector<uint32_t>::iterator aruco_id = queue->aruco_id.begin() ; aruco_id != queue->aruco_id.end(); ++aruco_id)
+  //     {
         
-        RCLCPP_INFO(this->get_logger(),std::to_string(*aruco_id));
-      }
-    }
+  //       RCLCPP_INFO(this->get_logger(),std::to_string(*aruco_id));
+  //     }
+  //   }
     
-  }
+  // }
+}
 
+void cssd_wm::failed_loading_handling(std::string request_id)
+{
+  //send error to RFM
+  //loop through all the RAWM. make sure that those with the same id is returned to the inventory.
 
 }
+
+void cssd_wm::RAWM_respond_callback(const cssd_msgs::msg::DispenserResult::SharedPtr msg)
+{
+  for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
+  {
+    if (RAWM_pointer-> name == msg->dispenser_name)
+    {
+      switch (msg-> success)
+      {
+        case 0: RAWM_pointer->dispenser_mode=2;return;
+        case 1: 
+        {
+          for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
+          {
+            if (RAWM_pointer->name == msg->dispenser_name)
+            {// R2R get payload drop status. Check that the last position is actually filled. If the thing missing straight away fail
+              // RCLCPP_INFO(this->get_logger(), "");
+              // if (successful)
+              // {
+              //   RAWM_pointer->dispenser_mode=0; 
+              // }
+              // else
+              // {
+              //   RAWM_pointer->dispenser_mode=2;
+              //   RCLCPP_ERROR(this->get_logger(), msg->dispenser_name +" has an error. Payload dropped during moving.");
+              // }
+             return; 
+            } 
+          }         
+        }
+      }
+    }
+  }
+}
+
+void cssd_wm::RAWM_state_callback(const cssd_msgs::msg::DispenserState::SharedPtr msg)
+{
+  for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
+  {
+    if (RAWM_pointer-> name == msg->dispenser_name)
+    {
+      switch (msg-> dispenser_mode)
+      {
+        case 0: RAWM_pointer->dispenser_mode=0; return;
+        case 1: RAWM_pointer->dispenser_mode=1; RCLCPP_INFO(this->get_logger(), msg->dispenser_name + " dispenser is busy."); return;
+        case 2: RAWM_pointer->dispenser_mode=2;RCLCPP_ERROR(this->get_logger(), msg->dispenser_name +" dispenser has an error."); return;
+      }
+    }
+  }
+}
+
+
+void cssd_wm::dispenser_request_callback(const cssd_msgs::msg::DispenserRequest::SharedPtr msg)
+{
+  if (msg->dispenser_name != dispenser_name) return;
+  RCLCPP_ERROR(this->get_logger(), ("%s received request %d.",msg->dispenser_name,msg->request_id ));
+  new_request = true;
+  request_id = msg -> request_id;
+}
+
+void cssd_wm::main()
+{ 
+  while(true){
+  while (new_request)
+  {/* 
+
+    R2R get trolley placement state. Make sure that trolley is near and have enough place for the request
+
+  */
+    int queue_remaining=0;
+    do
+    {
+      queue_remaining =0;
+      for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
+      { 
+        std::cout<<RAWM_pointer->name<< "\t"<< RAWM_pointer->dispenser_mode<<std::endl;
+        switch (RAWM_pointer-> dispenser_mode)
+        {
+          case 1:{queue_remaining+=1; continue;}
+          case 2:
+          {
+            RCLCPP_ERROR(this->get_logger(), ("Error in %s.",RAWM_pointer-> name));
+            failed_loading_handling(request_id);
+          }
+        }
+
+        for (std::vector<requests>::iterator queue_pointer = RAWM_pointer->queue.begin() ; queue_pointer != RAWM_pointer->queue.end(); ++queue_pointer)
+        {
+          if(queue_pointer->request_id == request_id)
+          {
+            cssd_msgs::msg::DispenserRequest request_msg;
+            request_msg.dispenser_name = RAWM_pointer -> name;
+            request_msg.request_id = request_id;
+            request_msg.transporter_type = transporter_type;
+            /*
+              add in placement
+              change sub_workcell class drop off point and keep track of which drop off point can be used
+            */
+
+            cssd_msgs::msg::DispenserRequestItem item;
+            item.item_type = queue_pointer->aruco_id[0];
+            item.quantity = 1;
+            //add in compartment name;
+            request_msg.items.push_back(item);
+            RAWMRequest_ -> publish(request_msg);
+            RAWM_pointer -> dispenser_mode = 1;
+            RCLCPP_INFO(this->get_logger(), ("New request sent to %s for item %d.",RAWM_pointer-> name, item.item_type));
+            queue_remaining+=1;
+            if (queue_pointer->aruco_id.size() != 1)
+            {
+              queue_pointer->aruco_id.erase(queue_pointer->aruco_id.begin());
+            }
+            else
+            {
+              RAWM_pointer->queue.erase(queue_pointer);
+            }
+            break;
+          }
+        }
+      }
+    }
+    while (queue_remaining!=0); 
+  }
+  //publish to meta fms that it is done
+}}
+
 
 // void h_sig_sigint(int signum)
 // {
@@ -154,7 +293,7 @@ void cssd_wm::request_callback(const cssd_msgs::msg::DispenserRequest::SharedPtr
 
 int main(int argc, char * argv[])
 {
-  
+
  // signal(SIGINT, h_sig_sigint);
   rclcpp::init(argc, argv);
   if ( atoi(argv[1])<1)
@@ -164,6 +303,7 @@ int main(int argc, char * argv[])
   }
 
   auto node = std::make_shared<cssd_wm>(atoi(argv[1]));
+  std::thread main_wcm(&cssd_wm::main, node);
   rclcpp::spin(node);
   rclcpp::shutdown();
   return 0;

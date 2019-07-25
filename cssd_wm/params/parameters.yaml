@@ -1,4 +1,10 @@
 cssd_wm:
   ros__parameters:
-    workcell1_inventory: ["basin"]
-    workcell2_inventory: ["instrument1","instrument2","instrument3"]
+    dispenser_name: "cssd_workcell"
+    ip_address: "127.0.0.1:3306"
+    username: "malcomneo"
+    password: "malcomneo"
+    database_name: "inventory"
+    RAWM1_inventory: ["basin"]
+    RAWM2_inventory: ["instrument1","instrument2","instrument3"]
+

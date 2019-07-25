@@ -16,7 +16,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(cssd_msgs REQUIRED)
+find_package(rmf_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 include_directories(include )
