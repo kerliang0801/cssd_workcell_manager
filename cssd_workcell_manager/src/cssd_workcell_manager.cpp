@@ -12,21 +12,59 @@
 
 CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
 { 
-  CheckInventory_ = this->create_subscription<rmf_msgs::msg::InventoryCheckRequest>("/dispenser_inventory_check_request", std::bind(&CssdWorkcellManager::inventory_check_callback, this, _1));
-  DispenserRequest_ = this->create_subscription<rmf_msgs::msg::DispenserRequest>("/dispenser_request", std::bind(&CssdWorkcellManager::dispenser_request_callback, this, _1));
-  RAWMRespond_ = this->create_subscription<rmf_msgs::msg::DispenserResult>("/RAWM_result",std::bind(&CssdWorkcellManager::RAWM_respond_callback, this, _1));
-  RAWMState_ = this->create_subscription<rmf_msgs::msg::DispenserState>("/RAWM_state",std::bind(&CssdWorkcellManager::RAWM_state_callback, this, _1));
-  InventoryCheckResponse_ = this->create_publisher<rmf_msgs::msg::InventoryCheckResponse>("/dispenser_inventory_check_response");
-  RAWMRequest_ =  this->create_publisher<rmf_msgs::msg::DispenserRequest>("/RAWM_request");
-  DispenserResponsd_ = this->create_publisher<rmf_msgs::msg::DispenserResult>("/dispenser_result");
-  
   //declaring parameter
   this->declare_parameter("dispenser_name");
   this->declare_parameter("ip_address");
   this->declare_parameter("username");
   this->declare_parameter("password");
   this->declare_parameter("database_name");
+  this->declare_parameter("R2R_docking_distance_threshold");
+  this->declare_parameter("R2R_server_name");
+  this->declare_parameter("max_request_size");
 
+  this->get_parameter("dispenser_name",dispenser_name);
+  this->get_parameter("ip_address",ip_address);
+  this->get_parameter("username",username);
+  this->get_parameter("password",password);
+  this->get_parameter("database_name",database_name);
+  this->get_parameter("R2R_docking_distance_threshold", R2R_docking_distance_threshold);
+  this->get_parameter("R2R_server_name", R2R_server_name);
+  this->get_parameter("max_request_size", max_request_size);
+
+  //creating calback group
+  RAWM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
+  RFM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
+  R2R_group_=RAWM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
+  
+
+  //creating pub/sub/client
+  CheckInventory_ = this->create_subscription<rmf_msgs::msg::InventoryCheckRequest>("/dispenser_inventory_check_request", 
+                                                                                    std::bind(&CssdWorkcellManager::inventory_check_callback, this, _1),
+                                                                                    rmw_qos_profile_default,
+                                                                                    RFM_callback_group_);
+  
+  DispenserRequest_ = this->create_subscription<rmf_msgs::msg::DispenserRequest>("/dispenser_request",
+                                                                                std::bind(&CssdWorkcellManager::dispenser_request_callback, this, _1),
+                                                                                rmw_qos_profile_default,
+                                                                                RFM_callback_group_);
+  
+  RAWMRespond_ = this->create_subscription<rmf_msgs::msg::DispenserResult>("/RAWM_result",
+                                                                          std::bind(&CssdWorkcellManager::RAWM_respond_callback, this, _1),
+                                                                          rmw_qos_profile_default,
+                                                                          RFM_callback_group_);
+  
+  RAWMState_ = this->create_subscription<rmf_msgs::msg::DispenserState>("/RAWM_state",
+                                                                        std::bind(&CssdWorkcellManager::RAWM_state_callback, this, _1),
+                                                                        rmw_qos_profile_default,
+                                                                        RFM_callback_group_);
+  
+  InventoryCheckResponse_ = this->create_publisher<rmf_msgs::msg::InventoryCheckResponse>("/dispenser_inventory_check_response");
+  RAWMRequest_ =  this->create_publisher<rmf_msgs::msg::DispenserRequest>("/RAWM_request");
+  DispenserResponse_ = this->create_publisher<rmf_msgs::msg::DispenserResult>("/dispenser_result");
+  
+  R2R_client_ = this->create_client<xbee_interface::srv::R2R>(R2R_server_name,rmw_qos_profile_services_default,R2R_group_);
+
+  //creating number of workcell variable based on number given in arg
   for (int i=1;i<=no_of_RAWM;i++)
   {
     RAWM.push_back(sub_workcell());
@@ -49,13 +87,7 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
   //   }
   // }
 
-
-  this->get_parameter("dispenser_name",dispenser_name);
-  this->get_parameter("ip_address",ip_address);
-  this->get_parameter("username",username);
-  this->get_parameter("password",password);
-  this->get_parameter("database_name",database_name);
- 
+  //setting up sqlconn
   try 
   {
     driver = get_driver_instance();
@@ -68,6 +100,13 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
   {
     RCLCPP_ERROR(this->get_logger(),"DB connection error.'%s' '%s'",(e.what()),(e.getErrorCode()));
   }
+
+  while (!R2R_client_->wait_for_service(std::chrono::seconds(1))) 
+  {
+    if (!rclcpp::ok()) {
+      RCLCPP_ERROR(this->get_logger(), "client interrupted while waiting for service to appear.");
+    }
+  }
 }
 
 
@@ -76,21 +115,35 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
   rmf_msgs::msg::InventoryCheckResponse response;
   response.check_id = msg -> check_id;
 
+  //check whether the quantity requested is above max handled
+  int quantity_requested = 0;
+  for (int i=0;i<msg->items.size();i++)
+  {
+    quantity_requested +=msg->items[i].quantity;
+  }
+  if (quantity_requested>max_request_size)
+  {
+    response.all_available = false;
+    InventoryCheckResponse_->publish(response);
+    return;
+  }
+
   stmt = con->createStatement();
-  res = stmt->executeQuery("SELECT item, COUNT(*) FROM workcell GROUP BY item");
+  res = stmt->executeQuery("SELECT item, COUNT(*) FROM workcell GROUP BY item"); 
+  //if unsure what the result array look like, pass the query in mysql
 
   for (uint32_t i=0;i<msg->items.size();i++)
-  { //looping through the item array
+  { //looping through the item requested array
     while (res->next())
-    {
+    { //looping through result until the item you get the item in the res array
       if (msg->items[i].item_type == res->getString("item"))
       {
         if (msg->items[i].quantity <= std::stoi(res->getString("count(*)")))
-        {
+        { //if item meet quanitty, break the while loop and continue to the next iterator in for loop
           break;
         }
         else
-        {
+        { //if does not meet. will publish false response and end function
           response.all_available = false;
           InventoryCheckResponse_->publish(response);
           return;
@@ -98,6 +151,7 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
       }
     }
   }
+  //if all item checked in request msg and have sufficient quantity
   response.all_available = true;
   InventoryCheckResponse_->publish(response);
 
@@ -205,30 +259,59 @@ void CssdWorkcellManager::RAWM_respond_callback(const rmf_msgs::msg::DispenserRe
           {
             if (RAWM_pointer->name == msg->dispenser_name)
             {// R2R get payload drop status. Check that the last position is actually filled. If the thing missing straight away fail
-              // RCLCPP_INFO(this->get_logger(), "");
-              // if (successful)
-              // {
-              //   RAWM_pointer->dispenser_mode=0; 
-              // }
-              // else
-              // {
-              //   RAWM_pointer->dispenser_mode=2;
-              //   RCLCPP_ERROR(this->get_logger(), msg->dispenser_name +" has an error. Payload dropped during moving.");
-              // }
+              std::vector<bool> compartment_status;
+              std::vector<std::string> compartment_id;
+              R2R_query(transporter_id,compartment_status, compartment_id);
+              for (int i=0;i<compartment_id.size();i++)
+              {
+                if (compartment_id[i] == RAWM_pointer->ongoing_compartment_id)
+                {
+                  if (compartment_status[i] ==1)
+                  {
+                    RCLCPP_INFO(this->get_logger(), "Loading compartment %s succesful", compartment_id[i]);
+                    RAWM_pointer->dispenser_mode = 0;
+                  }
+                }
+                else
+                {
+                  RCLCPP_INFO(this->get_logger(), "Loading compartment %s failed", compartment_id[i]);
+                  RAWM_pointer->dispenser_mode =2;
+                }
              return; 
-            } 
-          }         
+              } 
+            }         
+          }
         }
       }
     }
   }
 }
 
-void r2r_info(std::string device_id)
+bool CssdWorkcellManager::R2R_query(std::string device_id, 
+                                    std::vector<bool>& compartment_status,
+                                    std::vector<std::string>& compartment_id)
 {
+ 
+  std::string targeted_R2R_id = "XB" + device_id;
+  auto R2R_request_msg = std::make_shared<xbee_interface::srv::R2R::Request>();
+  R2R_request_msg ->mover_name = targeted_R2R_id;
+  auto future = R2R_client_->async_send_request(R2R_request_msg);
+
+  auto response = future.get();
+
+  if (response->estimated_distance > R2R_docking_distance_threshold or response->result == 0)
+  {
+    return 0;
+  }
+
+  RCLCPP_INFO(this->get_logger(), "R2R successful, trolley is at position.");
+  std::vector<bool> new_compartment_status =response -> states;
+  std::vector<std::string> new_compartment_id = response -> states_header;
+  compartment_status = new_compartment_status;
+  compartment_id = new_compartment_id;
+  return 1;
 
 }
-
 
 void CssdWorkcellManager::RAWM_state_callback(const rmf_msgs::msg::DispenserState::SharedPtr msg)
 {
@@ -249,21 +332,61 @@ void CssdWorkcellManager::RAWM_state_callback(const rmf_msgs::msg::DispenserStat
 
 void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::DispenserRequest::SharedPtr msg)
 {
+  request_id = msg->request_id;
+  //check whether the manager is called
   if (msg->dispenser_name != dispenser_name) return;
   RCLCPP_ERROR(this->get_logger(), ("%s received request %d.",msg->dispenser_name,msg->request_id ));
+
+ //R2R get trolley compartment state and make sure that the trolley is close
+  if (R2R_query(transporter_id,trolley_compartment_status,trolley_compartment_id) == 0)
+  {
+    RCLCPP_ERROR(this->get_logger(), ("R2R unsuccessful."));
+    send_result_to_meta_FMS(0);
+    new_request = false;
+    failed_loading_handling(msg->request_id);
+  }
+
+  //get quantity requested
+  int quantity_requested = 0;
+  for (int i=0;i<msg->items.size();i++)
+  {
+    quantity_requested +=msg->items[i].quantity;
+  }
+
+  //get quantity trolley can hold
+  int trolley_empty_compartment = 0;
+  for (int i=0;i<trolley_compartment_status.size();i++)
+  {
+    if (trolley_compartment_status[i] ==0) trolley_empty_compartment+=1;
+  }
+
+  if (quantity_requested>trolley_empty_compartment)
+  {//if not enough space on trolley, prepare failed response and release reserved inventory
+    failed_loading_handling(msg->request_id);
+    new_request = false;
+    send_result_to_meta_FMS(0);
+    return;
+  }
+
   new_request = true;
   request_id = msg -> request_id;
+  transporter_id = msg->transporter_type;
+}
+
+void CssdWorkcellManager::send_result_to_meta_FMS(bool result)
+{
+  rmf_msgs::msg::DispenserResult result_msg;
+  result_msg.success = result;
+  result_msg.request_id = request_id;
+  result_msg.dispenser_name = dispenser_name;
+  DispenserResponse_ -> publish(result_msg);
 }
 
 void CssdWorkcellManager::main()
 { 
   while(true){
   while (new_request)
-  {/* 
-
-    R2R get trolley placement state. Make sure that trolley is near and have enough place for the request
-
-  */
+  {
     int queue_remaining=0;
     do
     {
@@ -276,10 +399,11 @@ void CssdWorkcellManager::main()
           case 1:{queue_remaining+=1; continue;}
           case 2:
           {
+            queue_remaining+=1;
             RCLCPP_ERROR(this->get_logger(), ("Error in %s.",RAWM_pointer-> name));
             failed_loading_handling(request_id);
             new_request = false;
-            continue;
+            break;
           }
         }
 
@@ -290,16 +414,23 @@ void CssdWorkcellManager::main()
             rmf_msgs::msg::DispenserRequest request_msg;
             request_msg.dispenser_name = RAWM_pointer -> name;
             request_msg.request_id = request_id;
-            request_msg.transporter_type = transporter_type;
-            /*
-              add in placement
-              change sub_workcell class drop off point and keep track of which drop off point can be used
-            */
-
+            request_msg.transporter_type = transporter_id;
+            
             rmf_msgs::msg::DispenserRequestItem item;
-            item.item_type = queue_pointer->aruco_id[0];
+            item.item_type = "marker_id" + std::to_string(queue_pointer->aruco_id[0]);
             item.quantity = 1;
-            //add in compartment name;
+
+            for (int i=0;i<trolley_compartment_status.size();i++)
+            {
+              if (trolley_compartment_status[i] ==0)
+              {
+                item.compartment_name = "marker_id" + trolley_compartment_id[i];
+                trolley_compartment_status[i] = "1";
+                RAWM_pointer-> ongoing_compartment_id = trolley_compartment_id[i];
+                break;
+              }
+            }
+            
             request_msg.items.push_back(item);
             RAWMRequest_ -> publish(request_msg);
             RAWM_pointer -> dispenser_mode = 1;
@@ -319,9 +450,13 @@ void CssdWorkcellManager::main()
       }
     }
     while (queue_remaining!=0); 
+  
+  if (queue_remaining==0)
+  {
+    new_request=false; 
+    send_result_to_meta_FMS(1);
   }
-  //publish to meta fms that it is done
-}}
+}}}
 
 
 // void h_sig_sigint(int signum)
@@ -344,7 +479,9 @@ int main(int argc, char * argv[])
 
   auto node = std::make_shared<CssdWorkcellManager>(atoi(argv[1]));
   std::thread main_wcm(&CssdWorkcellManager::main, node);
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor executor;
+  executor.add_node(node);
+  executor.spin();
   rclcpp::shutdown();
   return 0;
 }

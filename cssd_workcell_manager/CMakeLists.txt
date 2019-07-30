@@ -18,6 +18,8 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rmf_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
+find_package(xbee_interface REQUIRED)
+
 
 include_directories(include )
 
@@ -26,7 +28,8 @@ add_executable(cssd_workcell_manager${target_suffix} src/cssd_workcell_manager.c
 ament_target_dependencies(cssd_workcell_manager${target_suffix}
   "rclcpp${target_suffix}"
   "rmf_msgs"
-  "geometry_msgs")
+  "geometry_msgs"
+  "xbee_interface")
 target_link_libraries(cssd_workcell_manager ${catkin_LIBRARIES} mysqlcppconn)
 
 install(TARGETS cssd_workcell_manager DESTINATION lib/${PROJECT_NAME})
