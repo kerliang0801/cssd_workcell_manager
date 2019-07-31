@@ -3,7 +3,7 @@
 <package format="3">
   <name>cssd_workcell_manager</name>
   <version>0.0.1</version>
-  <description>patient_device</description>
+  <description>CSSD_workcell_manager to organise request for RAWMS under it.</description>
 
   <maintainer email="malcom@hopetechnik.com">malcom</maintainer>
 
