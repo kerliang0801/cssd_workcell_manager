@@ -1,6 +1,0 @@
-builtin_interfaces/Time request_time
-string dispenser_name
-string request_id
-string transporter_type
-geometry_msgs/TransformStamped transporter_frame
-DispenserRequestItem[] items
