@@ -12,11 +12,12 @@ sudo apt-get install libmysqlcppconn-dev=1.1.9-1
 ## creating database
 1. enter mysql application
 ```
-sudo mysql
+mysql -u root -p
 ```
 2. Create new user for cppconn
 ```
 CREATE USER 'newuser'@'localhost' IDENTIFIED BY 'user_password';
+GRANT ALL PRIVILEGES ON *.* TO 'username'@'localhost' IDENTIFIED BY 'password';
 ```
 3. create database
 ```
