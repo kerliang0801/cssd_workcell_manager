@@ -31,7 +31,7 @@
 
 
 using std::placeholders::_1;
-using ServiceResponseFuture = rclcpp::Client<xbee_interface::srv::R2R>::SharedFuture;
+using namespace std::chrono_literals;
 
 struct requests
 {
@@ -94,9 +94,12 @@ private:
 	float R2R_docking_distance_threshold;
 	int max_request_size;
 
+	//flag
+	bool new_request = false;
+	bool R2R_response = false;
+
 	//variables
 	std::vector<sub_workcell> RAWM;
-	bool new_request = false;
 	std::string request_id;
 	std::string transporter_id; 
 	std::vector<bool> trolley_compartment_status;
@@ -125,9 +128,7 @@ private:
   /*handle RAWM failure. called in when error occur such as when the status of any RAWM is 2.
   Will release all leftover item in the request_id.
 	*/
-  bool R2R_query(std::string device_id, 
-                std::vector<bool>& compartment_status,
-                std::vector<std::string>& compartment_id);
+  bool R2R_query(std::string device_id);
   //query to get R2R info
   
   void send_result_to_meta_FMS(bool result);
