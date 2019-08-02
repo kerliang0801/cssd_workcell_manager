@@ -14,6 +14,12 @@ sudo apt-get install libmysqlcppconn-dev=1.1.9-1
 3. [rmf_msgs](null)
 
 ## Setup The Environment
+
+### Package Complilation
+```
+colcon build --symlink-install --packages-select cssd_workcell_manager
+```
+
 ### Simple Mysql DB Setup
 ```
 # 1. enter mysql application
@@ -36,15 +42,30 @@ exit
 ros2 cd cssd_workcell_manager
 ./db_repopulation
 ```
+** For now username & password are 'malcomneo'
 
-### Package Complilation
-```
-colcon build --symlink-install --packages-select cssd_workcell_manager
-```
 
 ## Running the node
 1. Make sure that the `parameters.yaml` file in params folder is changed to the appropriate parameter.
 
 ```
-ros2 run cssd_workcell_manager cssd_workcell_manager ,number_of_workcell>  __params:=/home/malcomneo/ros2_ws/src/CSSD_WM/cssd_workcell_manager/params/parameters.yaml
+ros2 run cssd_workcell_manager cssd_workcell_manager <$NUM_OF_WORKCELL>  __params:={$ROS2_WS}/src/cssd_workcell_manager/cssd_workcell_manager/params/parameters.yaml
 ```
+
+```
+SAMPLE ROS2 TOPIC PUB
+```
+
+
+## What has changed
+- change `main` in class to `task_execution_thread`
+- change of topic names
+
+## TODO
+- Class member var name (e.g.`dispenser_name` to `dispenser_name_`)
+- Change `sub_workcell` to a struct
+- replace `RAWM` to a generic term `subworkcell`
+- use `std::map` for `RAWM_pointer`, and change naming: `current_tasks_map_obj`
+- tidy `task_execution_thread` function
+- $NUM_OF_WORKCELL in rosparam
+- add sample ros2 dispenser reqeuest pub in readme file

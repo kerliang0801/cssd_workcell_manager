@@ -31,6 +31,8 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
   this->get_parameter("R2R_server_name", R2R_server_name);
   this->get_parameter("max_request_size", max_request_size);
 
+  std::cout<<" Starting "<< dispenser_name << std::endl;
+
   //creating calback group
   RAWM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
   RFM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
@@ -48,18 +50,18 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
                                                                                 rmw_qos_profile_default,
                                                                                 RFM_callback_group_);
   
-  RAWMRespond_ = this->create_subscription<rmf_msgs::msg::DispenserResult>("/RAWM_result",
+  RAWMRespond_ = this->create_subscription<rmf_msgs::msg::DispenserResult>("/cssd_worckcell/dispenser_result",
                                                                           std::bind(&CssdWorkcellManager::RAWM_respond_callback, this, _1),
                                                                           rmw_qos_profile_default,
                                                                           RAWM_callback_group_);
   
-  RAWMState_ = this->create_subscription<rmf_msgs::msg::DispenserState>("/RAWM_state",
+  RAWMState_ = this->create_subscription<rmf_msgs::msg::DispenserState>("/cssd_worckcell/dispenser_state",
                                                                         std::bind(&CssdWorkcellManager::RAWM_state_callback, this, _1),
                                                                         rmw_qos_profile_default,
                                                                         RAWM_callback_group_);
   
   InventoryCheckResponse_ = this->create_publisher<rmf_msgs::msg::InventoryCheckResponse>("/dispenser_inventory_check_response");
-  RAWMRequest_ =  this->create_publisher<rmf_msgs::msg::DispenserRequest>("/RAWM_request");
+  RAWMRequest_ =  this->create_publisher<rmf_msgs::msg::DispenserRequest>("/cssd_worckcell/dispenser_request");
   DispenserResponse_ = this->create_publisher<rmf_msgs::msg::DispenserResult>("/dispenser_result");
   
   R2R_client_ = this->create_client<xbee_interface::srv::R2R>(R2R_server_name,rmw_qos_profile_services_default,R2R_group_);
@@ -153,8 +155,8 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
         return;
       }
     }
-    
   }
+
   //if all item checked in request msg and have sufficient quantity
   response.all_available = true;
   InventoryCheckResponse_->publish(response);
@@ -258,7 +260,7 @@ void CssdWorkcellManager::RAWM_respond_callback(const rmf_msgs::msg::DispenserRe
     {
       switch (msg-> success)
       {
-        case 0: RAWM_pointer->dispenser_mode=2;return;
+        case 0: RAWM_pointer->dispenser_mode=2; return;
         case 1: 
         {
           for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
@@ -338,8 +340,6 @@ bool CssdWorkcellManager::R2R_query(std::string device_id)
 }
 
 
-
-
 void CssdWorkcellManager::RAWM_state_callback(const rmf_msgs::msg::DispenserState::SharedPtr msg)
 {
   for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
@@ -370,7 +370,7 @@ void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::Dispen
   if (R2R_query(transporter_id) == 0)
   {
     RCLCPP_ERROR(this->get_logger(), ("R2R unsuccessful."));
-    send_result_to_meta_FMS(0);
+    pub_dispenser_task_result(false);
     new_request = false;
     failed_loading_handling(msg->request_id);
   }
@@ -393,7 +393,7 @@ void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::Dispen
   {//if not enough space on trolley, prepare failed response and release reserved inventory
     failed_loading_handling(msg->request_id);
     new_request = false;
-    send_result_to_meta_FMS(0);
+    pub_dispenser_task_result(false);
     return;
   }
 
@@ -402,91 +402,97 @@ void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::Dispen
   transporter_id = msg->transporter_type;
 }
 
-void CssdWorkcellManager::send_result_to_meta_FMS(bool result)
+
+void CssdWorkcellManager::pub_dispenser_task_result(bool success_result)
 {
   rmf_msgs::msg::DispenserResult result_msg;
-  result_msg.success = result;
+  result_msg.success = success_result;
   result_msg.request_id = request_id;
   result_msg.dispenser_name = dispenser_name;
   DispenserResponse_ -> publish(result_msg);
 }
 
-void CssdWorkcellManager::main()
+
+// ????? 
+void CssdWorkcellManager::task_execution_thread()
 { 
   while(true){
 //  std::cout<<new_request<<std::endl;
-  while (new_request)
-  {
-    int queue_remaining=0;
-    do
+    while (new_request)
     {
-      queue_remaining =0;
-      for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
-      { 
-        std::cout<<RAWM_pointer->name<< "\t"<< RAWM_pointer->dispenser_mode<<std::endl;
-        switch (RAWM_pointer-> dispenser_mode)
-        {
-          case 1:{queue_remaining+=1; continue;}
-          case 2:
+      int queue_remaining=0;
+
+      do
+      {
+        queue_remaining =0;
+        for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
+        { 
+          std::cout<<RAWM_pointer->name<< "\t"<< RAWM_pointer->dispenser_mode<<std::endl;
+          switch (RAWM_pointer-> dispenser_mode)
           {
-            queue_remaining+=1;
-            RCLCPP_ERROR(this->get_logger(), ("Error in %s.",RAWM_pointer-> name));
-            failed_loading_handling(request_id);
-            new_request = false;
-            break;
+            case 1:{queue_remaining+=1; continue;}
+            case 2:
+            {
+              queue_remaining+=1;
+              RCLCPP_ERROR(this->get_logger(), ("Error in %s.",RAWM_pointer-> name));
+              failed_loading_handling(request_id);
+              new_request = false;
+              break;
+            }
           }
-        }
 
-        for (std::vector<requests>::iterator queue_pointer = RAWM_pointer->queue.begin() ; queue_pointer != RAWM_pointer->queue.end(); ++queue_pointer)
-        {
-          if(queue_pointer->request_id == request_id)
+          for (std::vector<requests>::iterator queue_pointer = RAWM_pointer->queue.begin() ; queue_pointer != RAWM_pointer->queue.end(); ++queue_pointer)
           {
-            rmf_msgs::msg::DispenserRequest request_msg;
-            request_msg.dispenser_name = RAWM_pointer -> name;
-            request_msg.request_id = request_id;
-            request_msg.transporter_type = transporter_id;
-            
-            rmf_msgs::msg::DispenserRequestItem item;
-            item.item_type = "marker_id" + std::to_string(queue_pointer->aruco_id[0]);
-            item.quantity = 1;
+            if(queue_pointer->request_id == request_id)
+            {
+              rmf_msgs::msg::DispenserRequest request_msg;
+              request_msg.dispenser_name = RAWM_pointer -> name;
+              request_msg.request_id = request_id;
+              request_msg.transporter_type = transporter_id;
+              
+              rmf_msgs::msg::DispenserRequestItem item;
+              item.item_type = "marker_id" + std::to_string(queue_pointer->aruco_id[0]);
+              item.quantity = 1;
 
-            for (int i=0;i<trolley_compartment_status.size();i++)
-            {
-              if (trolley_compartment_status[i] ==0)
+              for (int i=0;i<trolley_compartment_status.size();i++)
               {
-                item.compartment_name = "marker_id" + trolley_compartment_id[i];
-                trolley_compartment_status[i] = "1";
-                RAWM_pointer-> ongoing_compartment_id = trolley_compartment_id[i];
-                break;
+                if (trolley_compartment_status[i] ==0)
+                {
+                  item.compartment_name = "marker_id" + trolley_compartment_id[i];
+                  trolley_compartment_status[i] = "1";
+                  RAWM_pointer-> ongoing_compartment_id = trolley_compartment_id[i];
+                  break;
+                }
               }
+              
+              request_msg.items.push_back(item);
+              RAWMRequest_ -> publish(request_msg);
+              RAWM_pointer -> dispenser_mode = 1;
+              RCLCPP_INFO(this->get_logger(), ("New request sent to %s for item %d.",RAWM_pointer-> name, item.item_type));
+              queue_remaining+=1;
+              if (queue_pointer->aruco_id.size() != 1)
+              {
+                queue_pointer->aruco_id.erase(queue_pointer->aruco_id.begin());
+              }
+              else
+              {
+                RAWM_pointer->queue.erase(queue_pointer);
+              }
+              break;
             }
-            
-            request_msg.items.push_back(item);
-            RAWMRequest_ -> publish(request_msg);
-            RAWM_pointer -> dispenser_mode = 1;
-            RCLCPP_INFO(this->get_logger(), ("New request sent to %s for item %d.",RAWM_pointer-> name, item.item_type));
-            queue_remaining+=1;
-            if (queue_pointer->aruco_id.size() != 1)
-            {
-              queue_pointer->aruco_id.erase(queue_pointer->aruco_id.begin());
-            }
-            else
-            {
-              RAWM_pointer->queue.erase(queue_pointer);
-            }
-            break;
           }
         }
       }
+      while (queue_remaining!=0); 
+
+      if (queue_remaining==0)
+      {
+        new_request=false; 
+        pub_dispenser_task_result(true);
+      }
     }
-    while (queue_remaining!=0); 
-  
-  if (queue_remaining==0)
-  {
-    new_request=false; 
-    send_result_to_meta_FMS(1);
   }
-}}}
+}
 
 
 // void h_sig_sigint(int signum)
@@ -495,6 +501,14 @@ void CssdWorkcellManager::main()
 //   rclcpp::shutdown();
 //   exit(1);
 // }
+
+
+
+
+// -----------------------------------------------------------------------------------------------------------------
+// ------------------------------------------------------- MAIN ----------------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------
+
 
 int main(int argc, char * argv[])
 {
@@ -508,7 +522,7 @@ int main(int argc, char * argv[])
   }
 
   auto node = std::make_shared<CssdWorkcellManager>(atoi(argv[1]));
-  std::thread main_wcm(&CssdWorkcellManager::main, node);
+  std::thread main_wcm(&CssdWorkcellManager::task_execution_thread, node);
   rclcpp::executors::MultiThreadedExecutor executor;
   executor.add_node(node);
   executor.spin();
