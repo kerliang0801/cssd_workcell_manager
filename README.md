@@ -1,6 +1,15 @@
 # cssd_workcell_manager (cssd_wm)
+This is a ros2 package to manage multiple workcells. The cssd_wm consist of a database to take note of the inventory of the workcells under it.
 
-## acronym
+It is capable of
+1. Checking the db for the availability of the items
+2. Taking in request consisting a mix of item that the workcell hold under it
+3. Queuing the request until it is ready for pickup
+4. Sending single item request to individual workcell according to *DispenserRequest.msg* until the request is complete
+
+
+
+## Acronym
 RAWM = Robot Arm Workcell Manager
 
 ## Installing Dependencies
@@ -45,7 +54,7 @@ cd ros2_ws/src/cssd_workcell_manager/db_repopulation
 
 ** For now username & password are 'malcomneo'. If user and password has been set differently, please change and rebuild the repopulation code as shown below.
 ```
-# change the password
+# change the password or IP if db is not in the same machine
 con = driver->connect("tcp://127.0.0.1:3306", "malcomneo", "malcomneo");
 
 # compile
