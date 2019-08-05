@@ -55,7 +55,7 @@ sudo g++ -Wall -I/usr/include/cppconn -o db_repopulation db_repopulate.cpp -L/us
 
 
 ## Running the node
-1. Make sure that the `parameters.yaml` file in params folder is changed to the appropriate parameter (e.g password, inventory, etc mentioned above.
+1. Make sure that the `parameters.yaml` file in params folder is changed to the appropriate parameter (e.g password, inventory, etc mentioned above).
 
 ```
 ros2 run cssd_workcell_manager cssd_workcell_manager <$NUM_OF_WORKCELL>  __params:={$ROS2_WS}/src/cssd_workcell_manager/cssd_workcell_manager/params/parameters.yaml
