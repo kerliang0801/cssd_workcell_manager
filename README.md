@@ -78,9 +78,10 @@ SAMPLE ROS2 TOPIC PUB
 ## What has changed
 - change `main` in class to `task_execution_thread`
 - change of topic names
+- Class member var name (e.g.`dispenser_name` to `dispenser_name_`)
 
 ## TODO
-- Class member var name (e.g.`dispenser_name` to `dispenser_name_`)
+
 - Change `sub_workcell` to a struct
 - replace `RAWM` to a generic term `subworkcell`
 - use `std::map` for `RAWM_pointer`, and change naming: `current_tasks_map_obj`
