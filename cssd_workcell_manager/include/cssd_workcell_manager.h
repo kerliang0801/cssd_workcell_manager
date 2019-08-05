@@ -41,6 +41,7 @@ struct requests
 };
 
 
+// TODO: change to struct
 class sub_workcell
 {
 public: //dispenser_mode: (0,idle), (1,busy), (2,offline)
@@ -58,9 +59,9 @@ class CssdWorkcellManager : public rclcpp::Node
 {
 public:
   CssdWorkcellManager(int no_of_workcell);
-  void main();
-private:
+  void task_execution_thread();
 
+private:
 		
   rclcpp::Subscription<rmf_msgs::msg::InventoryCheckRequest>::SharedPtr CheckInventory_;
   rclcpp::Subscription<rmf_msgs::msg::DispenserRequest>::SharedPtr DispenserRequest_;
@@ -85,6 +86,7 @@ private:
   sql::PreparedStatement *pstmt;
 
   //ros param
+  // TODO: change var name
 	std::string dispenser_name;
 	std::string ip_address;
 	std::string username;
@@ -123,7 +125,6 @@ private:
   void RAWM_state_callback(const rmf_msgs::msg::DispenserState::SharedPtr msg);
   // periodically update RAWM status when RAWM send periodic status updates.
 
-  
   void failed_loading_handling(std::string request_id);
   /*handle RAWM failure. called in when error occur such as when the status of any RAWM is 2.
   Will release all leftover item in the request_id.
@@ -131,7 +132,7 @@ private:
   bool R2R_query(std::string device_id);
   //query to get R2R info
   
-  void send_result_to_meta_FMS(bool result);
+  void pub_dispenser_task_result(bool success_result);
   //send the result accordingly to the result arg.
 
 };
