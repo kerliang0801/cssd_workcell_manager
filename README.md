@@ -39,14 +39,23 @@ CREATE TABLE workcell (aruco_id INT, item VARCHAR(30) );
 
 # 6. Populate table
 exit
-ros2 cd cssd_workcell_manager
+cd ros2_ws/src/cssd_workcell_manager/db_repopulation
 ./db_repopulation
 ```
-** For now username & password are 'malcomneo'
+
+** For now username & password are 'malcomneo'. If user and password has been set differently, please change and rebuild the repopulation code as shown below.
+```
+# change the password
+con = driver->connect("tcp://127.0.0.1:3306", "malcomneo", "malcomneo");
+
+# compile
+sudo g++ -Wall -I/usr/include/cppconn -o db_repopulation db_repopulate.cpp -L/usr/lib -lmysqlcppconn
+
+```
 
 
 ## Running the node
-1. Make sure that the `parameters.yaml` file in params folder is changed to the appropriate parameter.
+1. Make sure that the `parameters.yaml` file in params folder is changed to the appropriate parameter (e.g password, inventory, etc mentioned above.
 
 ```
 ros2 run cssd_workcell_manager cssd_workcell_manager <$NUM_OF_WORKCELL>  __params:={$ROS2_WS}/src/cssd_workcell_manager/cssd_workcell_manager/params/parameters.yaml
