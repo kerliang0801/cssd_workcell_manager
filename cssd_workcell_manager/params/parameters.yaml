@@ -1,6 +1,6 @@
 cssd_wm:
   ros__parameters:
-    dispenser_name: "cssd_workcell"
+    dispenser_name_: "cssd_workcell"
     ip_address: "127.0.0.1:3306"
     username: "malcomneo"
     password: "malcomneo"

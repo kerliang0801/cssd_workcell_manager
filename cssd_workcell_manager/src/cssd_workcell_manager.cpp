@@ -13,7 +13,7 @@
 CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
 { 
   //declaring parameter
-  this->declare_parameter("dispenser_name");
+  this->declare_parameter("dispenser_name_");
   this->declare_parameter("ip_address");
   this->declare_parameter("username");
   this->declare_parameter("password");
@@ -22,7 +22,7 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
   this->declare_parameter("R2R_server_name");
   this->declare_parameter("max_request_size");
 
-  this->get_parameter("dispenser_name",dispenser_name);
+  this->get_parameter("dispenser_name_",dispenser_name_);
   this->get_parameter("ip_address",ip_address);
   this->get_parameter("username",username);
   this->get_parameter("password",password);
@@ -31,12 +31,12 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
   this->get_parameter("R2R_server_name", R2R_server_name);
   this->get_parameter("max_request_size", max_request_size);
 
-  std::cout<<" Starting "<< dispenser_name << std::endl;
+  std::cout<<" Starting "<< dispenser_name_ << std::endl;
 
   //creating calback group
-  RAWM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
+  SubWorkcell_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
   RFM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
-  R2R_group_=RAWM_callback_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
+  R2R_group_=this->create_callback_group(rclcpp::callback_group::CallbackGroupType::MutuallyExclusive);
   
 
   //creating pub/sub/client
@@ -50,18 +50,18 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
                                                                                 rmw_qos_profile_default,
                                                                                 RFM_callback_group_);
   
-  RAWMRespond_ = this->create_subscription<rmf_msgs::msg::DispenserResult>("/cssd_worckcell/dispenser_result",
-                                                                          std::bind(&CssdWorkcellManager::RAWM_respond_callback, this, _1),
+  SubWorkcellRespond_ = this->create_subscription<rmf_msgs::msg::DispenserResult>("/cssd_worckcell/dispenser_result",
+                                                                          std::bind(&CssdWorkcellManager::SubWorkcell_respond_callback, this, _1),
                                                                           rmw_qos_profile_default,
-                                                                          RAWM_callback_group_);
+                                                                          SubWorkcell_callback_group_);
   
-  RAWMState_ = this->create_subscription<rmf_msgs::msg::DispenserState>("/cssd_worckcell/dispenser_state",
-                                                                        std::bind(&CssdWorkcellManager::RAWM_state_callback, this, _1),
+  SubWorkcellState_ = this->create_subscription<rmf_msgs::msg::DispenserState>("/cssd_worckcell/dispenser_state",
+                                                                        std::bind(&CssdWorkcellManager::SubWorkcell_state_callback, this, _1),
                                                                         rmw_qos_profile_default,
-                                                                        RAWM_callback_group_);
+                                                                        SubWorkcell_callback_group_);
   
   InventoryCheckResponse_ = this->create_publisher<rmf_msgs::msg::InventoryCheckResponse>("/dispenser_inventory_check_response");
-  RAWMRequest_ =  this->create_publisher<rmf_msgs::msg::DispenserRequest>("/cssd_worckcell/dispenser_request");
+  SubWorkcellRequest_ =  this->create_publisher<rmf_msgs::msg::DispenserRequest>("/cssd_worckcell/dispenser_request");
   DispenserResponse_ = this->create_publisher<rmf_msgs::msg::DispenserResult>("/dispenser_result");
   
   R2R_client_ = this->create_client<xbee_interface::srv::R2R>(R2R_server_name,rmw_qos_profile_services_default,R2R_group_);
@@ -130,8 +130,6 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
   //if unsure what the result array look like, pass the query in mysql
   for (uint32_t i=0;i<msg->items.size();i++)
   { //looping through the item requested array
-            std::cout<<i<<std::endl;
-
     while (res->next())
     { //looping through result until the item you get the item in the res array
 
@@ -246,13 +244,13 @@ void CssdWorkcellManager::failed_loading_handling(std::string request_id)
 
   //send error to RFM
   rmf_msgs::msg::DispenserResult dispenser_result;
-  dispenser_result.dispenser_name = dispenser_name;
+  dispenser_result.dispenser_name = dispenser_name_;
   dispenser_result.request_id = request_id;
   dispenser_result.success = 0;
 
 }
 
-void CssdWorkcellManager::RAWM_respond_callback(const rmf_msgs::msg::DispenserResult::SharedPtr msg)
+void CssdWorkcellManager::SubWorkcell_respond_callback(const rmf_msgs::msg::DispenserResult::SharedPtr msg)
 {
   for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
   {
@@ -340,7 +338,7 @@ bool CssdWorkcellManager::R2R_query(std::string device_id)
 }
 
 
-void CssdWorkcellManager::RAWM_state_callback(const rmf_msgs::msg::DispenserState::SharedPtr msg)
+void CssdWorkcellManager::SubWorkcell_state_callback(const rmf_msgs::msg::DispenserState::SharedPtr msg)
 {
   for (std::vector<sub_workcell>::iterator RAWM_pointer = RAWM.begin() ; RAWM_pointer != RAWM.end(); ++RAWM_pointer)
   {
@@ -361,7 +359,7 @@ void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::Dispen
 {
   request_id = msg->request_id;
   //check whether the manager is called
-  if (msg->dispenser_name != dispenser_name) return;
+  if (msg->dispenser_name != dispenser_name_) return;
 
   RCLCPP_INFO(this->get_logger(), ("request received"));
 
@@ -408,7 +406,7 @@ void CssdWorkcellManager::pub_dispenser_task_result(bool success_result)
   rmf_msgs::msg::DispenserResult result_msg;
   result_msg.success = success_result;
   result_msg.request_id = request_id;
-  result_msg.dispenser_name = dispenser_name;
+  result_msg.dispenser_name = dispenser_name_;
   DispenserResponse_ -> publish(result_msg);
 }
 
@@ -466,7 +464,7 @@ void CssdWorkcellManager::task_execution_thread()
               }
               
               request_msg.items.push_back(item);
-              RAWMRequest_ -> publish(request_msg);
+              SubWorkcellRequest_ -> publish(request_msg);
               RAWM_pointer -> dispenser_mode = 1;
               RCLCPP_INFO(this->get_logger(), ("New request sent to %s for item %d.",RAWM_pointer-> name, item.item_type));
               queue_remaining+=1;
