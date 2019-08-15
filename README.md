@@ -52,14 +52,19 @@ cd ros2_ws/src/cssd_workcell_manager/db_repopulation
 ./db_repopulation
 ```
 
-** For now username & password are 'malcomneo'. If user and password has been set differently, please change and rebuild the repopulation code as shown below.
+# For now username & password are 'malcomneo'. If user and password has been set differently, please change and rebuild the repopulation code as shown below.
+
+## cssd_workcell_manager.cpp
 ```
-# change the password or IP if db is not in the same machine
+con = driver->connect("tcp://127.0.0.1:3306", "malcomneo", "malcomneo");
+```
+## db_repopulate.cpp
+
+```
 con = driver->connect("tcp://127.0.0.1:3306", "malcomneo", "malcomneo");
 
-# compile
+#rebuild
 sudo g++ -Wall -I/usr/include/cppconn -o db_repopulation db_repopulate.cpp -L/usr/lib -lmysqlcppconn
-
 ```
 
 
