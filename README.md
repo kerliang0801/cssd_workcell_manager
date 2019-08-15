@@ -71,12 +71,17 @@ sudo g++ -Wall -I/usr/include/cppconn -o db_repopulation db_repopulate.cpp -L/us
 ## Running the node
 1. Make sure that the `parameters.yaml` file in params folder is changed to the appropriate parameter (e.g password, inventory, etc mentioned above).
 
+2. To launch CSSD workcell manager
 ```
 ros2 run cssd_workcell_manager cssd_workcell_manager <$NUM_OF_WORKCELL>  __params:={$ROS2_WS}/src/cssd_workcell_manager/cssd_workcell_manager/params/parameters.yaml
 ```
 
+3.Demo. Send a Meta Fleet Manager inventory check and dispenser request message
 ```
-SAMPLE ROS2 TOPIC PUB
+ ros2 topic pub /dispenser_inventory_check_request rmf_msgs/msg/InventoryCheckRequest "{check_id: 123, items: [{item_type: "basin", quantity: 1}, {item_type: "instrument1", quantity: 1}]}"
+
+ros2 topic pub /dispenser_request rmf_msgs/msg/DispenserRequest "{dispenser_name: "cssd_workcell", request_id: 123, items: [{item_type: "basin", quantity: 1}, {item_type: "instrument1", quantity: 1}]}"
+
 ```
 
 
