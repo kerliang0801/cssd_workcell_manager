@@ -78,9 +78,9 @@ ros2 run cssd_workcell_manager cssd_workcell_manager <$NUM_OF_WORKCELL>  __param
 
 3.Demo. Send a Meta Fleet Manager inventory check and dispenser request message
 ```
- ros2 topic pub /dispenser_inventory_check_request rmf_msgs/msg/InventoryCheckRequest "{check_id: 123, items: [{item_type: "basin", quantity: 1}, {item_type: "instrument1", quantity: 1}]}"
+ ros2 topic pub --once /dispenser_inventory_check_request rmf_msgs/msg/InventoryCheckRequest "{check_id: 123, items: [{item_type: "basin", quantity: 1}, {item_type: "instrument1", quantity: 1}]}"
 
-ros2 topic pub /dispenser_request rmf_msgs/msg/DispenserRequest "{dispenser_name: "cssd_workcell", request_id: 123, items: [{item_type: "basin", quantity: 1}, {item_type: "instrument1", quantity: 1}]}"
+ros2 topic pub --once /dispenser_request rmf_msgs/msg/DispenserRequest "{dispenser_name: "cssd_workcell", request_id: 123, items: [{item_type: "basin", quantity: 1}, {item_type: "instrument1", quantity: 1}]}"
 
 ```
 
