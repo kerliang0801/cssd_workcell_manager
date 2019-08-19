@@ -104,11 +104,15 @@ CssdWorkcellManager::CssdWorkcellManager(int no_of_RAWM): Node("cssd_wm")
     RCLCPP_ERROR(this->get_logger(),"DB connection error.'%s' '%s'",(e.what()),(e.getErrorCode()));
   }
 
+   RCLCPP_INFO(this->get_logger(),"Node is running");
+
 }
 
 
 void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::InventoryCheckRequest::SharedPtr msg)
 {
+  RCLCPP_INFO(this->get_logger(),"Received inventory check request.");
+
   rmf_msgs::msg::InventoryCheckResponse response;
   response.check_id = msg -> check_id;
 
@@ -125,11 +129,13 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
     return;
   }
 
+  //check whether the inventory has the quantity
   stmt = con->createStatement();
   res = stmt->executeQuery("SELECT item, COUNT(*) FROM workcell GROUP BY item"); 
   //if unsure what the result array look like, pass the query in mysql
   for (uint32_t i=0;i<msg->items.size();i++)
   { //looping through the item requested array
+
     while (res->next())
     { //looping through result until the item you get the item in the res array
 
@@ -143,7 +149,7 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
         { //if does not meet. will publish false response and end function
           response.all_available = false;
           InventoryCheckResponse_->publish(response);
-          return;
+          return; 
         }
       }
       if (res->isLast() and msg->items[i].item_type != res->getString("item"))
@@ -155,7 +161,9 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
     }
   }
 
-  //if all item checked in request msg and have sufficient quantity
+  // finish checking and all item has sufficient quantity. start adding to queue
+  RCLCPP_INFO(this->get_logger(),"Inventory has enough quantity. Adding request to queue.");
+
   response.all_available = true;
   InventoryCheckResponse_->publish(response);
 
