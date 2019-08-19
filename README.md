@@ -66,7 +66,21 @@ con = driver->connect("tcp://127.0.0.1:3306", "malcomneo", "malcomneo");
 #rebuild
 sudo g++ -Wall -I/usr/include/cppconn -o db_repopulation db_repopulate.cpp -L/usr/lib -lmysqlcppconn
 ```
+## Parameters
+- dispenser_name: name of the workcell
 
+- database_name: the name of the database the workcell is using
+
+- max_request_size: the maximum request / inventory check that can be sent. Usually is the maximum compartment of agv
+
+- R2R_docking_distance_threshold: The minimum distance R2R should respond
+
+- R2R_server_name: topic name which R2R will request from
+
+- **inventory**
+  Used to keep track of the inventory each subworkcell hold. <br/>
+  Format: subworkcell(number)_inventory <br/>
+  Number is to be range from 1 to the number of workcell you insert at launch command
 
 ## Running the node
 1. Make sure that the `parameters.yaml` file in params folder is changed to the appropriate parameter (e.g password, inventory, etc mentioned above).
@@ -91,9 +105,6 @@ ros2 topic pub --once /dispenser_request rmf_msgs/msg/DispenserRequest "{dispens
 - Class member var name (e.g.`dispenser_name` to `dispenser_name_`)
 
 ## TODO
-
-- Change `sub_workcell` to a struct
-- replace `RAWM` to a generic term `subworkcell`
 - use `std::map` for `RAWM_pointer`, and change naming: `current_tasks_map_obj`
 - tidy `task_execution_thread` function
 - $NUM_OF_WORKCELL in rosparam
