@@ -173,14 +173,17 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
     std::string item_type = msg->items[items_position].item_type;
     int32_t quantity = msg->items[items_position].quantity;
 
-    for (std::vector<sub_workcell>::iterator subworkcell_pointer = subworkcell.begin() ; subworkcell_pointer != subworkcell.end(); ++subworkcell_pointer)
+    for (auto subworkcell_pointer : subworkcell)
     { //looping through subworkcell
-      if (std::find(subworkcell_pointer->item_carried_by_subworkcell.begin(), subworkcell_pointer->item_carried_by_subworkcell.end(), item_type) != subworkcell_pointer->item_carried_by_subworkcell.end())
-      {// if item is carried by the subworkcell / if subworkcell is responsible for that item
+      if (std::find(subworkcell_pointer.item_carried_by_subworkcell.begin(), 
+          subworkcell_pointer.tem_carried_by_subworkcell.end(), 
+          item_type) != subworkcell_pointer->item_carried_by_subworkcell.end())
+        {// if subworkcell is responsible for that item
+
         if ((subworkcell_pointer->queue.size() == 0) or (subworkcell_pointer->queue.back().request_id != msg->check_id) )
         {//if the last queue is not related to current order, create a new one
-          subworkcell_pointer->queue.push_back(requests());
-          subworkcell_pointer->queue.back().request_id = msg->check_id;
+          subworkcell_pointer.queue.push_back(requests());
+          subworkcell_pointer.queue.back().request_id = msg->check_id;
         }
 
         //get inventory from DB in an ordered fashion
@@ -192,8 +195,8 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
           if(res ->getString("item") == item_type)
           {
             int aruco_id = std::stoi(res->getString("aruco_id"));
-            subworkcell_pointer->queue.back().aruco_id.push_back(aruco_id);
-            subworkcell_pointer->queue.back().item_type.push_back(item_type);            
+            subworkcell_pointer.queue.back().aruco_id.push_back(aruco_id);
+            subworkcell_pointer.queue.back().item_type.push_back(item_type);            
             item_entered_count+=1;
 
             //remove from the DB once it is added.
@@ -226,14 +229,14 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
 }
 
 void CssdWorkcellManager::failed_loading_handling(std::string request_id)
-{  //loop through all the subworkcell. make sure that those with the same id is returned to the inventory.
+{ //loop through all the subworkcell. make sure that those with the same id is returned to the inventory.
   RCLCPP_INFO(this->get_logger(), "Starting to release items in request_id: %s", request_id);
 
-  for (std::vector<sub_workcell>::iterator subworkcell_pointer = subworkcell.begin() ; subworkcell_pointer != subworkcell.end(); ++subworkcell_pointer)
+  for (auto subworkcell_pointer : subworkcell)
   { //looping through the subworkcell
-    for (std::vector<requests>::iterator queue_pointer = subworkcell_pointer->queue.begin() ; queue_pointer != subworkcell_pointer->queue.end(); ++queue_pointer)
+    for (auto queue_pointer : subworkcell_pointer.queue)
     {//looping through the queue
-      if (queue_pointer->request_id == request_id)
+      if (queue_pointer.request_id == request_id)
       {
         for (int element=0;element<queue_pointer->aruco_id.size();element++)
         { //once found the request in queue with request id, loop through it and insert everything left back to the DB
@@ -250,7 +253,6 @@ void CssdWorkcellManager::failed_loading_handling(std::string request_id)
     }
   }
 
-
   //send error to MFM
   rmf_msgs::msg::DispenserResult dispenser_result;
   dispenser_result.dispenser_name = dispenser_name_;
@@ -261,40 +263,34 @@ void CssdWorkcellManager::failed_loading_handling(std::string request_id)
 
 void CssdWorkcellManager::SubWorkcell_respond_callback(const rmf_msgs::msg::DispenserResult::SharedPtr msg)
 {
-  for (std::vector<sub_workcell>::iterator subworkcell_pointer = subworkcell.begin() ; subworkcell_pointer != subworkcell.end(); ++subworkcell_pointer)
+  for (auto subworkcell_pointer : subworkcell)
   {
-    if (subworkcell_pointer-> name == msg->dispenser_name)
+    if (subworkcell_pointer.name == msg->dispenser_name)
     {
       switch (msg-> success)
       {
-        case 0: subworkcell_pointer->dispenser_mode=2; return;
+        case 0: subworkcell_pointer->dispenser_mode=2; return; //failure, turn dispenser_mode into 2. Error will be handled at main loop
         case 1: 
-        {
-          for (std::vector<sub_workcell>::iterator subworkcell_pointer = subworkcell.begin() ; subworkcell_pointer != subworkcell.end(); ++subworkcell_pointer)
+        { // loading is successful. check with R2R to make sure its true.
+          std::vector<bool> compartment_status;
+          std::vector<std::string> compartment_id;
+          R2R_query(transporter_id);
+          for (int i=0;i<compartment_id.size();i++)
           {
-            if (subworkcell_pointer->name == msg->dispenser_name)
-            {// R2R get payload drop status. Check that the last position is actually filled. If the thing missing straight away fail
-              std::vector<bool> compartment_status;
-              std::vector<std::string> compartment_id;
-              R2R_query(transporter_id);
-              for (int i=0;i<compartment_id.size();i++)
+            if (compartment_id[i] == subworkcell_pointer->ongoing_compartment_id)
+            {
+              if (compartment_status[i] ==1)
               {
-                if (compartment_id[i] == subworkcell_pointer->ongoing_compartment_id)
-                {
-                  if (compartment_status[i] ==1)
-                  {
-                    RCLCPP_INFO(this->get_logger(), "Loading compartment %s succesful", compartment_id[i]);
-                    subworkcell_pointer->dispenser_mode = 0;
-                  }
-                }
-                else
-                {
-                  RCLCPP_INFO(this->get_logger(), "Loading compartment %s failed", compartment_id[i]);
-                  subworkcell_pointer->dispenser_mode =2;
-                }
-             return; 
-              } 
-            }         
+                RCLCPP_INFO(this->get_logger(), "Loading compartment %s succesful", compartment_id[i]);
+                subworkcell_pointer->dispenser_mode = 0;
+              }
+            }
+            else
+            {
+              RCLCPP_INFO(this->get_logger(), "Loading compartment %s failed", compartment_id[i]);
+              subworkcell_pointer->dispenser_mode =2;
+            }
+         return; 
           }
         }
       }
@@ -305,7 +301,6 @@ void CssdWorkcellManager::SubWorkcell_respond_callback(const rmf_msgs::msg::Disp
 bool CssdWorkcellManager::R2R_query(std::string device_id)
 {
   this->R2R_response = false;
-
   while (!R2R_client_->wait_for_service(1s)) 
   {
     if (!rclcpp::ok()) 
