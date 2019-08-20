@@ -109,3 +109,4 @@ ros2 topic pub --once /dispenser_request rmf_msgs/msg/DispenserRequest "{dispens
 - tidy `task_execution_thread` function
 - $NUM_OF_WORKCELL in rosparam
 - add sample ros2 dispenser reqeuest pub in readme file
+- test R2R_query and handling of compartment
