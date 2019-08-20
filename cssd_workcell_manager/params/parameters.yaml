@@ -8,6 +8,6 @@ cssd_wm:
     max_request_size: 4
     R2R_docking_distance_threshold: 100.00
     R2R_server_name: "/query_server_XB001"
-    RAWM1_inventory: ["basin"]
-    RAWM2_inventory: ["instrument1","instrument2","instrument3"]
+    subworkcell1_inventory: ["basin"]
+    subworkcell2_inventory: ["instrument1","instrument2","instrument3"]
 
