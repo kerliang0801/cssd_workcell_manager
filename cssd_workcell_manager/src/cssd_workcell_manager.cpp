@@ -327,7 +327,7 @@ bool CssdWorkcellManager::R2R_query(std::string device_id)
     }
     RCLCPP_INFO(this->get_logger(), "R2R successful, trolley is at position.");
     R2R_response = true;
-    trolley_compartment_status = response->states;
+    current_trolley_compartment_status = response->states;
     trolley_compartment_id = response->state_names;
   };
 
@@ -386,9 +386,9 @@ void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::Dispen
   }
   //get quantity trolley can hold
   int trolley_empty_compartment = 0;
-  for (int i=0;i<trolley_compartment_status.size();i++)
+  for (int i=0;i<current_trolley_compartment_status.size();i++)
   {
-    if (trolley_compartment_status[i] ==0) trolley_empty_compartment+=1;
+    if (current_trolley_compartment_status[i] ==0) trolley_empty_compartment+=1;
   }
 
   if (quantity_requested>trolley_empty_compartment)
@@ -402,6 +402,7 @@ void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::Dispen
   new_request = true;
   request_id = msg -> request_id;
   transporter_id = msg->transporter_type;
+  planned_trolley_compartment_status = current_trolley_compartment_status;
 }
 
 
@@ -456,12 +457,12 @@ void CssdWorkcellManager::task_execution_thread()
               item.item_type = "marker_id" + std::to_string(queue_pointer->aruco_id[0]);
               item.quantity = 1;
 
-              for (int i=0;i<trolley_compartment_status.size();i++)
+              for (int i=0;i<planned_trolley_compartment_status.size();i++)
               {
-                if (trolley_compartment_status[i] ==0)
+                if (planned_trolley_compartment_status[i] ==0)
                 {
                   item.compartment_name = "marker_id" + trolley_compartment_id[i];
-                  trolley_compartment_status[i] = "1";
+                  planned_trolley_compartment_status[i] = "1";
                   subworkcell_pointer-> ongoing_compartment_id = trolley_compartment_id[i];
                   break;
                 }
