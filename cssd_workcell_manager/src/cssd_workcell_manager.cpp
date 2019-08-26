@@ -176,11 +176,11 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
     for (auto subworkcell_pointer : subworkcell)
     { //looping through subworkcell
       if (std::find(subworkcell_pointer.item_carried_by_subworkcell.begin(), 
-          subworkcell_pointer.tem_carried_by_subworkcell.end(), 
-          item_type) != subworkcell_pointer->item_carried_by_subworkcell.end())
+          subworkcell_pointer.item_carried_by_subworkcell.end(), 
+          item_type) != subworkcell_pointer.item_carried_by_subworkcell.end())
         {// if subworkcell is responsible for that item
 
-        if ((subworkcell_pointer->queue.size() == 0) or (subworkcell_pointer->queue.back().request_id != msg->check_id) )
+        if ((subworkcell_pointer.queue.size() == 0) or (subworkcell_pointer.queue.back().request_id != msg->check_id) )
         {//if the last queue is not related to current order, create a new one
           subworkcell_pointer.queue.push_back(requests());
           subworkcell_pointer.queue.back().request_id = msg->check_id;
@@ -232,11 +232,11 @@ void CssdWorkcellManager::failed_loading_handling(std::string request_id)
 { //loop through all the subworkcell. make sure that those with the same id is returned to the inventory.
   RCLCPP_INFO(this->get_logger(), "Starting to release items in request_id: %s", request_id);
 
-  for (auto subworkcell_pointer : subworkcell)
+  for (auto subworkcell_pointer = subworkcell.begin();subworkcell_pointer != subworkcell.end();)
   { //looping through the subworkcell
-    for (auto queue_pointer : subworkcell_pointer.queue)
+    for (auto queue_pointer = subworkcell_pointer->queue.begin(); queue_pointer != subworkcell_pointer->queue.end();)
     {//looping through the queue
-      if (queue_pointer.request_id == request_id)
+      if (queue_pointer->request_id == request_id)
       {
         for (int element=0;element<queue_pointer->aruco_id.size();element++)
         { //once found the request in queue with request id, loop through it and insert everything left back to the DB
@@ -269,7 +269,7 @@ void CssdWorkcellManager::SubWorkcell_respond_callback(const rmf_msgs::msg::Disp
     {
       switch (msg-> success)
       {
-        case 0: subworkcell_pointer->dispenser_mode=2; return; //failure, turn dispenser_mode into 2. Error will be handled at main loop
+        case 0: subworkcell_pointer.dispenser_mode=2; return; //failure, turn dispenser_mode into 2. Error will be handled at main loop
         case 1: 
         { // loading is successful. check with R2R to make sure its true.
           std::vector<bool> compartment_status;
@@ -277,18 +277,18 @@ void CssdWorkcellManager::SubWorkcell_respond_callback(const rmf_msgs::msg::Disp
           R2R_query(transporter_id);
           for (int i=0;i<compartment_id.size();i++)
           {
-            if (compartment_id[i] == subworkcell_pointer->ongoing_compartment_id)
+            if (compartment_id[i] == subworkcell_pointer.ongoing_compartment_id)
             {
               if (compartment_status[i] ==1)
               {
                 RCLCPP_INFO(this->get_logger(), "Loading compartment %s succesful", compartment_id[i]);
-                subworkcell_pointer->dispenser_mode = 0;
+                subworkcell_pointer.dispenser_mode = 0;
               }
             }
             else
             {
               RCLCPP_INFO(this->get_logger(), "Loading compartment %s failed", compartment_id[i]);
-              subworkcell_pointer->dispenser_mode =2;
+              subworkcell_pointer.dispenser_mode =2;
             }
          return; 
           }

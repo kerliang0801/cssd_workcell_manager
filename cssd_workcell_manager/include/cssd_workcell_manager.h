@@ -104,8 +104,10 @@ private:
 	std::vector<sub_workcell> subworkcell;
 	std::string request_id;
 	std::string transporter_id; 
-	std::vector<bool> trolley_compartment_status;
+	std::vector<bool> current_trolley_compartment_status;
 	std::vector<std::string> trolley_compartment_id;
+  std::vector<bool> planned_trolley_compartment_status;
+	
 
   void inventory_check_callback(const rmf_msgs::msg::InventoryCheckRequest::SharedPtr msg);
   /*check DB inventory when OTUI request for a set of item. Will make sure that the requested item is below the limit set in yaml.
