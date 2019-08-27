@@ -7,7 +7,9 @@ It is capable of
 3. Queuing the request until it is ready for pickup
 4. Sending single item request to individual workcell according to *DispenserRequest.msg* until the request is complete
 
-
+## Logic and message flow
+***for flow of the code, look in documentation folder***
+![](documentations/RAM_logic.png)
 
 ## Acronym
 RAWM = Robot Arm Workcell Manager
