@@ -118,7 +118,7 @@ void CssdWorkcellManager::inventory_check_callback(const rmf_msgs::msg::Inventor
 
   //check whether the quantity requested is above max handled
   int quantity_requested = 0;
-  for (int i=0;i<msg->items.size();i++)
+  for (uint i=0;i<msg->items.size();i++)
   {
     quantity_requested +=msg->items[i].quantity;
   }
@@ -238,7 +238,7 @@ void CssdWorkcellManager::failed_loading_handling(std::string request_id)
     {//looping through the queue
       if (queue_pointer->request_id == request_id)
       {
-        for (int element=0;element<queue_pointer->aruco_id.size();element++)
+        for (uint element=0;element<queue_pointer->aruco_id.size();element++)
         { //once found the request in queue with request id, loop through it and insert everything left back to the DB
           pstmt = con->prepareStatement("INSERT INTO workcell values (?,?)");
           pstmt->setInt(1,queue_pointer->aruco_id[element]);
@@ -275,7 +275,7 @@ void CssdWorkcellManager::SubWorkcell_respond_callback(const rmf_msgs::msg::Disp
           std::vector<bool> compartment_status;
           std::vector<std::string> compartment_id;
           R2R_query(transporter_id);
-          for (int i=0;i<compartment_id.size();i++)
+          for (uint i=0;i<compartment_id.size();i++)
           {
             if (compartment_id[i] == subworkcell_pointer.ongoing_compartment_id)
             {
@@ -380,13 +380,13 @@ void CssdWorkcellManager::dispenser_request_callback(const rmf_msgs::msg::Dispen
 
   //get quantity requested
   int quantity_requested = 0;
-  for (int i=0;i<msg->items.size();i++)
+  for (uint i=0;i<msg->items.size();i++)
   {
     quantity_requested +=msg->items[i].quantity;
   }
   //get quantity trolley can hold
   int trolley_empty_compartment = 0;
-  for (int i=0;i<current_trolley_compartment_status.size();i++)
+  for (uint i=0;i<current_trolley_compartment_status.size();i++)
   {
     if (current_trolley_compartment_status[i] ==0) trolley_empty_compartment+=1;
   }
@@ -437,7 +437,7 @@ void CssdWorkcellManager::task_execution_thread()
             case 2:
             {
               queue_remaining+=1;
-              RCLCPP_ERROR(this->get_logger(), ("Error in %s.",subworkcell_pointer-> name));
+              RCLCPP_ERROR(this->get_logger(), ("Error in %s.",subworkcell_pointer->name));
               failed_loading_handling(request_id);
               new_request = false;
               break;
@@ -457,7 +457,7 @@ void CssdWorkcellManager::task_execution_thread()
               item.item_type = "marker_id" + std::to_string(queue_pointer->aruco_id[0]);
               item.quantity = 1;
 
-              for (int i=0;i<planned_trolley_compartment_status.size();i++)
+              for (uint i=0;i<planned_trolley_compartment_status.size();i++)
               {
                 if (planned_trolley_compartment_status[i] ==0)
                 {
@@ -471,7 +471,7 @@ void CssdWorkcellManager::task_execution_thread()
               request_msg.items.push_back(item);
               SubWorkcellRequest_ -> publish(request_msg);
               subworkcell_pointer -> dispenser_mode = 1;
-              RCLCPP_INFO(this->get_logger(), ("New request sent to %s for item %d.",subworkcell_pointer-> name, item.item_type));
+              RCLCPP_INFO(this->get_logger(), ("New request sent to %s for item %d.",subworkcell_pointer->name, item.item_type));
               queue_remaining+=1;
               if (queue_pointer->aruco_id.size() != 1)
               {
