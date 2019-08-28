@@ -100,15 +100,8 @@ ros2 topic pub --once /dispenser_request rmf_msgs/msg/DispenserRequest "{dispens
 
 ```
 
-
-## What has changed
-- change `main` in class to `task_execution_thread`
-- change of topic names
-- Class member var name (e.g.`dispenser_name` to `dispenser_name_`)
-
 ## TODO
 - use `std::map` for `RAWM_pointer`, and change naming: `current_tasks_map_obj`
 - tidy `task_execution_thread` function
 - $NUM_OF_WORKCELL in rosparam
-- add sample ros2 dispenser reqeuest pub in readme file
 - test R2R_query and handling of compartment
