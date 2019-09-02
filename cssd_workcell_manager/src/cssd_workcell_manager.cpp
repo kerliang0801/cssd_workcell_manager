@@ -428,10 +428,9 @@ void CssdWorkcellManager::task_execution_thread()
       do
       {
         queue_remaining =0;
-        for (std::vector<sub_workcell>::iterator subworkcell_pointer = subworkcell.begin() ; subworkcell_pointer != subworkcell.end(); ++subworkcell_pointer)
+        for (auto subworkcell_pointer = subworkcell.begin();subworkcell_pointer != subworkcell.end();)
         { 
-          std::cout<<subworkcell_pointer->name<< "\t"<< subworkcell_pointer->dispenser_mode<<std::endl;
-          switch (subworkcell_pointer-> dispenser_mode)
+          switch (subworkcell_pointer->dispenser_mode)
           {
             case 1:{queue_remaining+=1; continue;}
             case 2:
@@ -444,7 +443,7 @@ void CssdWorkcellManager::task_execution_thread()
             }
           }
 
-          for (std::vector<requests>::iterator queue_pointer = subworkcell_pointer->queue.begin() ; queue_pointer != subworkcell_pointer->queue.end(); ++queue_pointer)
+          for (auto queue_pointer = subworkcell_pointer->queue.begin();queue_pointer != subworkcell_pointer->queue.end();)
           {
             if(queue_pointer->request_id == request_id)
             {
