@@ -9,7 +9,7 @@ It is capable of
 
 ## Logic and message flow
 ***for flow of the code, look in documentation folder***
-![](documentations/RAM_logic.png)
+![](documentations/RAM_overview.png)
 
 ## Acronym
 RAWM = Robot Arm Workcell Manager
@@ -105,3 +105,4 @@ ros2 topic pub --once /dispenser_request rmf_msgs/msg/DispenserRequest "{dispens
 - tidy `task_execution_thread` function
 - $NUM_OF_WORKCELL in rosparam
 - test R2R_query and handling of compartment
+- fix the multi threading with mutex. cant close properly now
